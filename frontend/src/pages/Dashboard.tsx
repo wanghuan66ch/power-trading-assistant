@@ -1,109 +1,231 @@
 import React, { useEffect, useState } from 'react'
-import { Row, Col, Card, Statistic, Spin } from 'antd'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts'
-import axios from 'axios'
+import { Row, Col, Card, Statistic, Spin, Typography, Space, Tag } from 'antd'
+import { ThunderboltOutlined, RiseOutlined, FallOutlined, BarChartOutlined } from '@ant-design/icons'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import dayjs from 'dayjs'
+import { priceApi, tradeApi } from '../api/client'
+import type { PriceTrend, TradeStatistics } from '../types/api'
 
-const API_BASE = 'http://localhost:8000/api/v1'
-
-interface Stats {
-  total_trades: number
-  total_capacity_mw: number
-  avg_price: number
-  total_amount: number
-  active_trades: number
-  completed_trades: number
-}
+const { Title, Text } = Typography
 
 const Dashboard: React.FC = () => {
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [trends, setTrends] = useState<PriceTrend[]>([])
+  const [stats, setStats] = useState<TradeStatistics | null>(null)
   const [loading, setLoading] = useState(true)
+  const today = dayjs().format('YYYY-MM-DD')
 
   useEffect(() => {
-    const fetchStats = async () => {
+    const fetch = async () => {
       try {
-        const res = await axios.get(`${API_BASE}/trade/stats/summary`)
-        setStats(res.data)
+        const [t, s] = await Promise.all([
+          priceApi.trend(),
+          tradeApi.stats(),
+        ])
+        setTrends(t)
+        setStats(s)
       } catch {
-        // 后端未启动时显示占位数据
-        setStats({
-          total_trades: 12,
-          total_capacity_mw: 3450,
-          avg_price: 386.5,
-          total_amount: 1334925,
-          active_trades: 8,
-          completed_trades: 4,
-        })
+        // ignore
       } finally {
         setLoading(false)
       }
     }
-    fetchStats()
+    fetch()
   }, [])
 
   if (loading) return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', marginTop: 100 }} />
 
+  // 取价格最高的5个省
+  const top5 = [...trends].sort((a, b) => b.current_price - a.current_price).slice(0, 5)
+  // 取价格最低的5个省
+  const bottom5 = [...trends].filter(t => t.current_price > 0).sort((a, b) => a.current_price - b.current_price).slice(0, 5)
+
+  const nationalAvg = trends.length
+    ? trends.reduce((s, t) => s + t.current_price, 0) / trends.length
+    : 0
+
   return (
     <div>
-      <h1 style={{ fontSize: 24, fontWeight: 600, marginBottom: 24 }}>📊 总览</h1>
+      <div style={{ marginBottom: 24 }}>
+        <Title level={2} style={{ margin: 0 }}>📊 总览</Title>
+        <Text type="secondary">{today}</Text>
+      </div>
 
       {/* 统计卡片 */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic title="交易记录总数" value={stats?.total_trades ?? 0} />
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card size="small" style={{ background: '#e6f7ff' }}>
+            <Statistic
+              title="交易笔数"
+              value={stats?.total_trades ?? 0}
+              suffix="笔"
+              valueStyle={{ fontSize: 20 }}
+            />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic title="总成交容量" value={stats?.total_capacity_mw ?? 0} suffix="MW" />
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card size="small" style={{ background: '#f6ffed' }}>
+            <Statistic
+              title="总成交容量"
+              value={(stats?.total_capacity_mw ?? 0).toLocaleString()}
+              suffix="MW"
+              valueStyle={{ fontSize: 20 }}
+            />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic title="平均电价" value={stats?.avg_price ?? 0} prefix="¥" suffix="/MW" />
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card size="small" style={{ background: '#fff7e6' }}>
+            <Statistic
+              title="平均电价"
+              value={stats?.avg_price ?? 0}
+              prefix="¥"
+              suffix="/MWh"
+              precision={2}
+              valueStyle={{ fontSize: 20 }}
+            />
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic title="总交易金额" value={(stats?.total_amount ?? 0) / 10000} prefix="¥" suffix="万" />
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card size="small" style={{ background: '#f9f0ff' }}>
+            <Statistic
+              title="全国均价"
+              value={nationalAvg}
+              prefix="¥"
+              suffix="/MWh"
+              precision={1}
+              valueStyle={{ fontSize: 20 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={12} sm={8} md={6} lg={4}>
+          <Card size="small" style={{ background: '#fff1f0' }}>
+            <Statistic
+              title="最高价省份"
+              value={top5[0]?.province ?? '-'}
+              suffix={top5[0] ? `${top5[0].current_price.toFixed(0)}元` : ''}
+              valueStyle={{ fontSize: 18, color: '#f5222d' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* 价格 + 交易双栏 */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        {/* 价格 TOP5 */}
+        <Col xs={24} lg={12}>
+          <Card title="📈 价格最高的省份" size="small">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {top5.map((t, i) => (
+                <div key={t.province} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                  <Space>
+                    <Tag color="red">{i + 1}</Tag>
+                    <Text>{t.province}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{t.price_type}</Text>
+                  </Space>
+                  <Space>
+                    <Text strong style={{ color: '#f5222d' }}>{t.current_price.toFixed(1)} 元/MWh</Text>
+                    {t.change_pct >= 0
+                      ? <RiseOutlined style={{ color: '#f5222d' }} />
+                      : <FallOutlined style={{ color: '#52c41a' }} />
+                    }
+                  </Space>
+                </div>
+              ))}
+            </Space>
+          </Card>
+        </Col>
+
+        {/* 价格最低5 */}
+        <Col xs={24} lg={12}>
+          <Card title="📉 价格最低的省份" size="small">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              {bottom5.map((t, i) => (
+                <div key={t.province} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0' }}>
+                  <Space>
+                    <Tag color="green">{i + 1}</Tag>
+                    <Text>{t.province}</Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>{t.price_type}</Text>
+                  </Space>
+                  <Space>
+                    <Text strong style={{ color: '#52c41a' }}>{t.current_price.toFixed(1)} 元/MWh</Text>
+                    {t.change_pct >= 0
+                      ? <RiseOutlined style={{ color: '#f5222d' }} />
+                      : <FallOutlined style={{ color: '#52c41a' }} />
+                    }
+                  </Space>
+                </div>
+              ))}
+            </Space>
           </Card>
         </Col>
       </Row>
 
       {/* 快捷入口 */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} lg={12}>
-          <Card title="📈 价格监控" extra={<a href="/price">查看更多</a>}>
-            实时追踪各省电力交易中心成交价格，支持价格预警和趋势分析
+      <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+        <Col xs={24} lg={6}>
+          <Card size="small" hoverable>
+            <Space>
+              <BarChartOutlined style={{ fontSize: 24, color: '#1890ff' }} />
+              <div>
+                <Text strong>价格监控</Text>
+                <br /><Text type="secondary" style={{ fontSize: 12 }}>{trends.length} 个省份价格</Text>
+              </div>
+            </Space>
           </Card>
         </Col>
-        <Col xs={24} lg={12}>
-          <Card title="🔮 功率预测" extra={<a href="/forecast">查看更多</a>}>
-            基于气象数据和 AI 模型，预测光伏/风电次日出力
+        <Col xs={24} lg={6}>
+          <Card size="small" hoverable>
+            <Space>
+              <ThunderboltOutlined style={{ fontSize: 24, color: '#fa8c16' }} />
+              <div>
+                <Text strong>功率预测</Text>
+                <br /><Text type="secondary" style={{ fontSize: 12 }}>光伏/风电 AI 预测</Text>
+              </div>
+            </Space>
           </Card>
         </Col>
-        <Col xs={24} lg={12}>
-          <Card title="💡 策略推荐" extra={<a href="/strategy">查看更多</a>}>
-            基于价格趋势分析，给出购电/售电时机和合约结构建议
+        <Col xs={24} lg={6}>
+          <Card size="small" hoverable>
+            <Space>
+              <RiseOutlined style={{ fontSize: 24, color: '#52c41a' }} />
+              <div>
+                <Text strong>交易管理</Text>
+                <br /><Text type="secondary" style={{ fontSize: 12 }}>{stats?.active_trades ?? 0} 笔执行中</Text>
+              </div>
+            </Space>
           </Card>
         </Col>
-        <Col xs={24} lg={12}>
-          <Card title="⚠️ 风险看板" extra={<a href="/risk">查看更多</a>}>
-            合约缺口预警、偏差考核估算、政策风险聚合
+        <Col xs={24} lg={6}>
+          <Card size="small" hoverable>
+            <Space>
+              <FallOutlined style={{ fontSize: 24, color: '#f5222d' }} />
+              <div>
+                <Text strong>风险看板</Text>
+                <br /><Text type="secondary" style={{ fontSize: 12 }}>合约缺口预警</Text>
+              </div>
+            </Space>
           </Card>
         </Col>
       </Row>
 
-      {/* 今日市场概况 */}
-      <Card title="今日市场概况">
-        <p>📅 2026年3月27日（周五）</p>
-        <ul style={{ lineHeight: 2 }}>
-          <li>沪指收涨 +0.58%，市场低开高走展现韧性</li>
-          <li>创新药板块爆发，锂矿/能源金属领涨</li>
-          <li>电力板块高位震荡，华电辽能9连板后出现分歧</li>
-          <li>电力交易辅助工具 MVP 版本已初始化完成</li>
-        </ul>
-      </Card>
+      {/* 实时价格条形图 */}
+      {trends.length > 0 && (
+        <Card title="🌡️ 各省当前价格对比" size="small" style={{ marginBottom: 16 }}>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart
+              data={trends.map(t => ({ province: t.province, price: t.current_price, avg: t.avg_price_7d }))}
+              margin={{ top: 5, right: 30, left: 0, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="province" tick={{ fontSize: 11 }} interval={3} />
+              <YAxis tick={{ fontSize: 11 }} unit="元" domain={[0, 'auto']} />
+              <Tooltip formatter={(v: number, name: string) => [`${v.toFixed(1)} 元/MWh`, name === 'price' ? '当前价' : '7日均价']} />
+              <Legend />
+              <Line type="monotone" dataKey="price" name="当前价" stroke="#1890ff" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="avg" name="7日均价" stroke="#52c41a" strokeWidth={1.5} strokeDasharray="5 5" />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
     </div>
   )
 }

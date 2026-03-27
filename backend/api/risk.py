@@ -113,13 +113,13 @@ async def get_risk_dashboard(db: AsyncSession = Depends(get_db)):
 
     # 预估偏差考核费用（简化计算）
     # 假设偏差 > 5% 开始考核
-   考核费用_query = select(
+    penalty_query = select(
         func.sum(
             func.abs(TradeRecord.capacity_mw * 0.1 * 100)  # 简化：10%偏差 × 100元/MW
         )
     ).where(TradeRecord.status == "active")
-    考核_result = await db.execute(考核费用_query)
-    estimated_penalty = 考核_result.scalar() or 0
+    penalty_result = await db.execute(penalty_query)
+    estimated_penalty = penalty_result.scalar() or 0
 
     return {
         "active_contracts": active_trades_count,

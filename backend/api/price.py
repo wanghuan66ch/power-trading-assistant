@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
 from models.trade import ProvincePrice, PriceAlert
-from schemas.trade import ProvincePriceResponse, PriceTrend
+from schemas.trade import ProvincePriceResponse, PriceTrend, PriceAlertResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -96,7 +96,27 @@ async def refresh_prices(db: AsyncSession = Depends(get_db)):
     return {"message": f"抓取完成，新增 {count} 条记录"}
 
 
-@router.get("/alerts", response_model=list[PriceAlert])
+@router.post("/refresh/{province}")
+async def refresh_province(province: str, db: AsyncSession = Depends(get_db)):
+    """抓取指定省份数据"""
+    from services.spider import ElectricityPriceSpider
+
+    spider = ElectricityPriceSpider(db)
+    count = await spider.crawl_province(province)
+    return {"message": f"{province} 抓取完成，新增 {count} 条记录"}
+
+
+@router.get("/test-spiders")
+async def test_spiders(db: AsyncSession = Depends(get_db)):
+    """测试各省爬虫连通性，返回各爬虫状态和样例数据"""
+    from services.spider import ElectricityPriceSpider
+
+    spider = ElectricityPriceSpider(db)
+    results = await spider.test_spiders()
+    return {"spiders": results}
+
+
+@router.get("/alerts", response_model=list[PriceAlertResponse])
 async def get_price_alerts(db: AsyncSession = Depends(get_db)):
     """获取价格预警"""
     query = select(PriceAlert).order_by(PriceAlert.created_at.desc()).limit(50)

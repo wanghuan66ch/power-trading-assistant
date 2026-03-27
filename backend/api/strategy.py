@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
 from schemas.trade import StrategyRecommendation
+from models.trade import ProvincePrice
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -30,27 +31,6 @@ async def get_strategy_recommendations(
     week_ago = now - timedelta(days=7)
 
     # 获取各省最新价格和历史均价
-    query = (
-        select(
-            func.avg(
-                func.nullif(
-                    func.substring(
-                        func.cast(
-                            func.now() - ProvincePrice.recorded_at, String
-                        ), ".*?(\\d+).*?"
-                    ).cast(Integer),
-                    0
-                )
-            ).label("avg_gap"),
-            ProvincePrice.province,
-            ProvincePrice.price_type,
-        )
-        for ProvincePrice in [None]  # placeholder, real query below
-    )
-
-    # 实际实现：从数据库读取各省价格数据做分析
-    from models.trade import ProvincePrice
-
     price_query = select(
         ProvincePrice.province,
         ProvincePrice.price_type,

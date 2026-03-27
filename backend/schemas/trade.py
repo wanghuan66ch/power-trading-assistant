@@ -135,6 +135,20 @@ class StrategyRecommendation(BaseModel):
 
 # ─── 风险相关 ───────────────────────────────────────────────
 
+class PriceAlertResponse(BaseModel):
+    id: int
+    province: str
+    alert_type: str
+    threshold_price: float
+    current_price: float
+    message: str
+    is_sent: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class RiskWarning(BaseModel):
     """风险预警"""
     warning_type: str  # contract_gap/penalty/policy

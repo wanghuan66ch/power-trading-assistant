@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # 数据库
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/power_trading"
+    database_url: str = "sqlite+aiosqlite:////home/wanghuan/code/power-trading-assistant/power_trading.db"
 
     # 电力交易中心 API（公开数据）
     electricity交易中心_base: str = "https://www.95598.cn"  #  example

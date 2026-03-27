@@ -1,0 +1,30 @@
+{
+  "plant_type": "光伏",
+  "model_type": "LightGBM",
+  "n_samples": 2292,
+  "n_features": 15,
+  "features": [
+    "irradiance",
+    "temperature",
+    "hour",
+    "day_of_year",
+    "cloud_cover",
+    "capacity_mw",
+    "norm_irradiance",
+    "temp_factor",
+    "solar_elevation_cos",
+    "hour_sin",
+    "hour_cos",
+    "doy_sin",
+    "doy_cos",
+    "norm_x_seasonal",
+    "norm_x_temp"
+  ],
+  "test_mae": 2.6789,
+  "test_mape": 10.3109,
+  "test_r2": 0.9517,
+  "cv_mae_mean": 2.8052,
+  "cv_mae_std": 0.4855,
+  "n_trees": 90,
+  "saved_at": "2026-03-27T18:34:18.756750"
+}

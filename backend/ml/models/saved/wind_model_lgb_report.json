@@ -1,0 +1,26 @@
+{
+  "plant_type": "风电",
+  "model_type": "LightGBM",
+  "n_samples": 5000,
+  "n_features": 11,
+  "features": [
+    "wind_speed",
+    "temperature",
+    "hour",
+    "day_of_year",
+    "capacity_mw",
+    "log_wind",
+    "wind_cubed",
+    "wind_squared",
+    "hour_sin",
+    "hour_cos",
+    "seasonal_factor"
+  ],
+  "test_mae": 2.3529,
+  "test_mape": 6.3057,
+  "test_r2": 0.9812,
+  "cv_mae_mean": 2.872,
+  "cv_mae_std": 0.5086,
+  "n_trees": 135,
+  "saved_at": "2026-03-27T18:36:31.303889"
+}

@@ -51,11 +51,13 @@ export const forecastApi = {
   list: (params?: { province?: string; plant_type?: string; limit?: number }) =>
     api.get<ForecastRecord[]>('/forecast/', { params }).then(r => r.data),
 
-  trigger: (plant_id: string, forecast_date?: string) =>
-    api.post('/forecast/predict', { plant_id, forecast_date }).then(r => r.data),
+  trigger: (plant_id: string, plant_type = '光伏', latitude = 30.0, longitude = 120.0, capacity_mw = 100.0) =>
+    api.post('/forecast/predict', null, { params: { plant_id, plant_type, latitude, longitude, capacity_mw } }).then(r => r.data),
 
   accuracy: (plant_id: string) =>
     api.get<ForecastAccuracy>(`/forecast/accuracy/${plant_id}`).then(r => r.data),
+
+  modelInfo: () => api.get<any>('/forecast/model-info').then(r => r.data),
 }
 
 export default api

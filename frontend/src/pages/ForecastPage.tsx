@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import {
   Card, Row, Col, Table, Select, Button, Tag, Space, Typography,
-  Statistic, Spin, message, Modal, Form, Input,
+  Statistic, Spin, message, Modal, Form, Input, InputNumber,
   Progress, Alert, Tabs
 } from 'antd'
 import {
-  SunOutlined, ThunderboltOutlined, ReloadOutlined
+  SunOutlined, ThunderboltOutlined, ReloadOutlined, ExperimentOutlined
 } from '@ant-design/icons'
 import {
   Line, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip,
@@ -17,24 +17,40 @@ import type { ForecastRecord } from '../types/api'
 
 const { Title, Text } = Typography
 
-// 模拟示例数据
 const DEMO_RECORDS: ForecastRecord[] = [
   { id: 1, plant_id: 'GD-PV-001', plant_type: '光伏', province: '广东', forecast_time: dayjs().subtract(1,'hour').toISOString(), predicted_power_mw: 45.2, actual_power_mw: 43.8, weather_condition: '晴', irradiance: 820, confidence: 0.92, created_at: dayjs().subtract(1,'hour').toISOString() },
   { id: 2, plant_id: 'GD-PV-001', plant_type: '光伏', province: '广东', forecast_time: dayjs().subtract(2,'hour').toISOString(), predicted_power_mw: 52.1, actual_power_mw: 51.5, weather_condition: '晴', irradiance: 875, confidence: 0.94, created_at: dayjs().subtract(2,'hour').toISOString() },
-  { id: 3, plant_id: 'GD-PV-001', plant_type: '光伏', province: '广东', forecast_time: dayjs().subtract(3,'hour').toISOString(), predicted_power_mw: 38.7, actual_power_mw: 39.2, weather_condition: '多云', irradiance: 620, confidence: 0.88, created_at: dayjs().subtract(3,'hour').toISOString() },
   { id: 4, plant_id: 'SD-WT-003', plant_type: '风电', province: '山东', forecast_time: dayjs().subtract(1,'hour').toISOString(), predicted_power_mw: 68.4, actual_power_mw: 65.1, weather_condition: '晴', wind_speed: 8.2, confidence: 0.85, created_at: dayjs().subtract(1,'hour').toISOString() },
   { id: 5, plant_id: 'SD-WT-003', plant_type: '风电', province: '山东', forecast_time: dayjs().subtract(2,'hour').toISOString(), predicted_power_mw: 71.2, actual_power_mw: 72.8, weather_condition: '晴', wind_speed: 9.1, confidence: 0.87, created_at: dayjs().subtract(2,'hour').toISOString() },
   { id: 6, plant_id: 'JS-PV-005', plant_type: '光伏', province: '江苏', forecast_time: dayjs().subtract(1,'hour').toISOString(), predicted_power_mw: 33.6, actual_power_mw: 34.1, weather_condition: '阴', irradiance: 380, confidence: 0.78, created_at: dayjs().subtract(1,'hour').toISOString() },
-  { id: 7, plant_id: 'ZJ-WT-007', plant_type: '风电', province: '浙江', forecast_time: dayjs().subtract(1,'hour').toISOString(), predicted_power_mw: 55.3, actual_power_mw: 53.9, weather_condition: '晴', wind_speed: 7.5, confidence: 0.83, created_at: dayjs().subtract(1,'hour').toISOString() },
 ]
 
-const DEMO_CHART_DATA = Array.from({ length: 24 }, (_, i) => ({
-  hour: `${i.toString().padStart(2,'0')}:00`,
-  predicted: Math.round((30 + Math.sin(i / 4 * Math.PI) * 25 + Math.random() * 5) * 10) / 10,
-  actual: i < new Date().getHours()
-    ? Math.round((28 + Math.sin(i / 4 * Math.PI) * 23 + Math.random() * 4) * 10) / 10
-    : null,
-}))
+// 模拟24小时光伏预测曲线（白天有电，夜间为0）
+const DEMO_CHART_DATA = Array.from({ length: 24 }, (_, i) => {
+  const solarHour = i >= 6 && i <= 18
+  const basePower = solarHour ? 40 + 35 * Math.sin((i - 6) / 12 * Math.PI) : 0
+  return {
+    hour: `${String(i).padStart(2,'0')}:00`,
+    predicted: solarHour ? Math.round((basePower + (Math.random() - 0.5) * 8) * 10) / 10 : 0,
+    actual: i < new Date().getHours() && solarHour
+      ? Math.round((basePower + (Math.random() - 0.5) * 6) * 10) / 10 : null,
+  }
+})
+
+interface ModelInfo {
+  loaded: boolean
+  model_type: string
+  report?: {
+    plant_type: string
+    test_mae: number
+    test_mape: number
+    test_r2: number
+    cv_mae_mean: number
+    cv_mae_std: number
+    n_trees: number
+    n_features: number
+  }
+}
 
 const ForecastPage: React.FC = () => {
   const [records, setRecords] = useState<ForecastRecord[]>([])
@@ -44,14 +60,19 @@ const ForecastPage: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false)
   const [triggering, setTriggering] = useState(false)
   const [activeTab, setActiveTab] = useState('curve')
+  const [modelInfo, setModelInfo] = useState<{pv?: ModelInfo; wind?: ModelInfo} | null>(null)
   const [chartData] = useState(DEMO_CHART_DATA)
   const [form] = Form.useForm()
 
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await forecastApi.list({ limit: 100 })
+      const [r, mi] = await Promise.all([
+        forecastApi.list({ limit: 100 }),
+        forecastApi.modelInfo().catch(() => null),
+      ])
       setRecords(r.length > 0 ? r : DEMO_RECORDS)
+      if (mi) setModelInfo(mi)
     } catch {
       setRecords(DEMO_RECORDS)
     } finally {
@@ -80,16 +101,22 @@ const ForecastPage: React.FC = () => {
   const wtCount = latest.filter(r => r.plant_type === '风电').length
   const avgConf = latest.length ? latest.reduce((s, r) => s + (r.confidence || 0), 0) / latest.length : 0
 
-  const handleTrigger = async (values: { plant_id: string; forecast_date?: string }) => {
+  const handleTrigger = async (values: { plant_id: string; plant_type?: string; latitude?: number; longitude?: number; capacity_mw?: number }) => {
     setTriggering(true)
     try {
-      await forecastApi.trigger(values.plant_id, values.forecast_date)
-      message.success('预测任务已触发')
+      await forecastApi.trigger(
+        values.plant_id,
+        values.plant_type || '光伏',
+        values.latitude || 30.0,
+        values.longitude || 120.0,
+        values.capacity_mw || 100.0,
+      )
+      message.success('预测已完成！结果已存入数据库')
       setModalOpen(false)
       form.resetFields()
       setTimeout(fetchData, 800)
-    } catch {
-      message.error('触发预测失败，请检查后端服务')
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '触发预测失败')
     } finally {
       setTriggering(false)
     }
@@ -111,7 +138,7 @@ const ForecastPage: React.FC = () => {
     },
     {
       title: '实际功率', dataIndex: 'actual_power_mw', key: 'actual_power_mw',
-      render: (v?: number) => v != null ? <Text>{v.toFixed(1)}</Text> : <Text type="secondary">-</Text>,
+      render: (v?: number) => v != null ? <Text type="success">{v.toFixed(1)}</Text> : <Text type="secondary">待填入</Text>,
     },
     { title: '天气', dataIndex: 'weather_condition', key: 'weather_condition', render: (v: string) => <Tag>{v}</Tag> },
     {
@@ -142,6 +169,8 @@ const ForecastPage: React.FC = () => {
 
   if (loading) return <Spin size="large" style={{ display: 'flex', justifyContent: 'center', marginTop: 100 }} />
 
+  const showModelAlert = modelInfo && (modelInfo.pv?.loaded || modelInfo.wind?.loaded)
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -151,6 +180,31 @@ const ForecastPage: React.FC = () => {
           <Button type="primary" icon={<ThunderboltOutlined />} onClick={() => setModalOpen(true)}>触发预测</Button>
         </Space>
       </div>
+
+      {/* 模型状态 */}
+      {showModelAlert && (
+        <Alert
+          message={
+            <Space>
+              <ExperimentOutlined />
+              <span>🧠 AI 模型已就绪：</span>
+              {modelInfo?.pv?.loaded && (
+                <Tag color="green">
+                  光伏 LightGBM MAE={modelInfo.pv.report?.test_mae?.toFixed(1)}MW MAPE={modelInfo.pv.report?.test_mape?.toFixed(1)}%
+                </Tag>
+              )}
+              {modelInfo?.wind?.loaded && (
+                <Tag color="blue">
+                  风电 LightGBM MAE={modelInfo.wind.report?.test_mae?.toFixed(1)}MW MAPE={modelInfo.wind.report?.test_mape?.toFixed(1)}%
+                </Tag>
+              )}
+            </Space>
+          }
+          type="success"
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+      )}
 
       {/* 统计卡片 */}
       <Row gutter={[12, 12]} style={{ marginBottom: 16 }}>
@@ -182,7 +236,7 @@ const ForecastPage: React.FC = () => {
       </Row>
 
       {/* 预测曲线 */}
-      <Card title="📊 预测出力曲线" style={{ marginBottom: 16 }}>
+      <Card title="📊 预测出力曲线（典型日模式）" style={{ marginBottom: 16 }}>
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
@@ -243,27 +297,57 @@ const ForecastPage: React.FC = () => {
           </Space>
         }
       >
-        <Alert
-          message="当前显示模拟示例数据。后端预测服务上线后，将自动获取真实 AI 模型预测结果。"
-          type="info" showIcon style={{ marginBottom: 12 }}
-        />
+        {!showModelAlert && (
+          <Alert
+            message="当前显示示例数据。触发预测后，LightGBM AI 模型将自动接入，获取真实气象数据并计算。"
+            type="info" showIcon style={{ marginBottom: 12 }}
+          />
+        )}
         <Table dataSource={filtered} columns={columns} rowKey="id" size="small"
           pagination={{ pageSize: 10, showSizeChanger: true }} />
       </Card>
 
       {/* 触发预测弹窗 */}
       <Modal
-        title="⚡ 触发功率预测" open={modalOpen}
+        title="⚡ 触发功率预测（调用 LightGBM AI 模型）"
+        open={modalOpen}
         onCancel={() => { setModalOpen(false); form.resetFields() }}
         onOk={() => form.submit()} confirmLoading={triggering}
+        width={520}
       >
-        <Form form={form} layout="vertical" onFinish={handleTrigger}>
-          <Form.Item name="plant_id" label="电站ID" rules={[{ required: true, message: '请输入电站ID' }]}>
-            <Input placeholder="如：GD-PV-001" />
-          </Form.Item>
-          <Form.Item name="forecast_date" label="预测日期（可选）">
-            <Input type="date" />
-          </Form.Item>
+        <Form form={form} layout="vertical" onFinish={handleTrigger} initialValues={{ plant_type: '光伏', latitude: 30.0, longitude: 120.0, capacity_mw: 100 }}>
+          <Row gutter={12}>
+            <Col span={12}>
+              <Form.Item name="plant_id" label="电站ID" rules={[{ required: true }]}>
+                <Input placeholder="如：GD-PV-001" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="plant_type" label="电站类型">
+                <Select>
+                  <Select.Option value="光伏">🌞 光伏</Select.Option>
+                  <Select.Option value="风电">🌀 风电</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={12}>
+            <Col span={8}>
+              <Form.Item name="latitude" label="纬度">
+                <InputNumber min={10} max={55} step={0.1} style={{ width: '100%' }} placeholder="如：30.0" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="longitude" label="经度">
+                <InputNumber min={73} max={136} step={0.1} style={{ width: '100%' }} placeholder="如：120.0" />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item name="capacity_mw" label="装机容量 (MW)">
+                <InputNumber min={1} max={5000} step={1} style={{ width: '100%' }} placeholder="如：100" />
+              </Form.Item>
+            </Col>
+          </Row>
         </Form>
       </Modal>
     </div>

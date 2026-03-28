@@ -10,6 +10,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import get_db
+from core.security import get_current_user_id
 from schemas.trade import StrategyRecommendation
 from models.trade import ProvincePrice
 
@@ -21,6 +22,7 @@ router = APIRouter()
 async def get_strategy_recommendations(
     province: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     获取策略推荐
@@ -81,6 +83,7 @@ async def get_strategy_recommendations(
 async def get_contract_structure_advice(
     province: str = Query(...),
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     合约期限结构建议

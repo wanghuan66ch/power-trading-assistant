@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from core.security import get_current_user_id
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +23,7 @@ async def get_risk_warnings(
     province: Optional[str] = Query(None),
     severity: Optional[str] = Query(None),  # 高/中/低
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """
     获取风险预警列表
@@ -101,7 +103,10 @@ async def get_risk_warnings(
 
 
 @router.get("/dashboard")
-async def get_risk_dashboard(db: AsyncSession = Depends(get_db)):
+async def get_risk_dashboard(
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
     """风险仪表盘总览"""
     now = datetime.utcnow()
 

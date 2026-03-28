@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # 数据库
     database_url: str = "sqlite+aiosqlite:////home/wanghuan/code/power-trading-assistant/power_trading.db"
 
+    # JWT 密钥
+    secret_key: str = Field(default="change-me-in-production-abc123xyz", env="SECRET_KEY")
+
     # 电力交易中心 API（公开数据）
     electricity交易中心_base: str = "https://www.95598.cn"  #  example
 

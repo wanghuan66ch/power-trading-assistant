@@ -1,6 +1,6 @@
 import React from 'react'
-import { Outlet, Link, useLocation } from 'react-router-dom'
-import { Layout as AntLayout, Menu } from 'antd'
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
+import { Layout as AntLayout, Menu, Dropdown, Avatar, Typography } from 'antd'
 import {
   DashboardOutlined,
   LineChartOutlined,
@@ -8,9 +8,13 @@ import {
   ExperimentOutlined,
   BulbOutlined,
   WarningOutlined,
+  LogoutOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
+import { useAuth } from '../hooks/useAuth'
 
-const { Sider, Content } = AntLayout
+const { Sider, Content, Header } = AntLayout
+const { Text } = Typography
 
 const navItems = [
   { key: '/dashboard', icon: <DashboardOutlined />, label: <Link to="/dashboard">总览</Link> },
@@ -23,6 +27,25 @@ const navItems = [
 
 const Layout: React.FC = () => {
   const location = useLocation()
+  const navigate = useNavigate()
+  const { user, logout } = useAuth()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const userMenu = {
+    items: [
+      {
+        key: 'logout',
+        icon: <LogoutOutlined />,
+        label: '退出登录',
+        danger: true,
+        onClick: handleLogout,
+      },
+    ],
+  }
 
   return (
     <AntLayout style={{ minHeight: '100vh' }}>
@@ -46,12 +69,42 @@ const Layout: React.FC = () => {
           items={navItems}
         />
       </Sider>
+
       <AntLayout>
+        {/* 顶部导航栏：右侧用户信息 */}
+        <Header style={{
+          background: '#fff',
+          padding: '0 24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          borderBottom: '1px solid #f0f0f0',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        }}>
+          <Dropdown menu={userMenu} placement="bottomRight">
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              cursor: 'pointer',
+              padding: '4px 8px',
+              borderRadius: 6,
+              transition: 'background 0.2s',
+            }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f5f5f5')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              <Avatar size="small" icon={<UserOutlined />} style={{ background: '#1677ff' }} />
+              <Text strong>{user?.username || user?.email}</Text>
+            </div>
+          </Dropdown>
+        </Header>
+
         <Content style={{ margin: '24px 16px', overflow: 'initial' }}>
           <div style={{
             background: '#fff',
             borderRadius: 8,
-            minHeight: 'calc(100vh - 48px)',
+            minHeight: 'calc(100vh - 48px - 64px)',
             padding: 24,
           }}>
             <Outlet />

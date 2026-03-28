@@ -3,28 +3,53 @@ import type {
   ProvincePrice, PriceTrend, TradeRecord, TradeRecordCreate,
   TradeStatistics, ForecastRecord, ForecastAccuracy, PriceAlert
 } from '../types/api'
+import { useAuth } from '../hooks/useAuth'
 
-const API_BASE = 'http://localhost:8000/api/v1'
-const api = axios.create({ baseURL: API_BASE, timeout: 15000 })
+const API_BASE = '/api/v1'
+
+// ── 每次请求都从 zustand store 拿最新 token ───────────────────────────────────
+
+
+const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 15000,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+// 请求拦截器：自动注入 token
+api.interceptors.request.use((config) => {
+  const token = useAuth.getState().token
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// 响应拦截器：401 → 跳转登录
+api.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      useAuth.getState().logout()
+      window.location.href = '/login'
+    }
+    return Promise.reject(err)
+  }
+)
 
 // ── 价格 API ──────────────────────────────────────────────────
 
 export const priceApi = {
-  /** 获取各省最新价格 */
   list: (params?: { province?: string; price_type?: string; limit?: number }) =>
     api.get<ProvincePrice[]>('/price/provinces', { params }).then(r => r.data),
 
-  /** 获取价格趋势（7天统计） */
   trend: (province?: string) =>
     api.get<PriceTrend[]>('/price/trend', { params: { province } }).then(r => r.data),
 
-  /** 触发抓取 */
   refresh: () => api.post('/price/refresh').then(r => r.data),
 
-  /** 测试爬虫 */
   testSpiders: () => api.get('/price/test-spiders').then(r => r.data),
 
-  /** 获取预警 */
   alerts: () => api.get<PriceAlert[]>('/price/alerts').then(r => r.data),
 }
 
